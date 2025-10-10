@@ -1,4 +1,4 @@
-// App.tsx - Versi Final Absolut
+// App.tsx - Versi dengan Tes Diagnostik
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
@@ -13,9 +13,9 @@ import { PlusIcon } from './components/icons/PlusIcon';
 import ConfirmationModal from './components/ConfirmationModal';
 
 const App: React.FC = () => {
-    // PENTING: State harus dimulai dengan array kosong, BUKAN data awal.
     const [applications, setApplications] = useState<Application[]>([]);
     
+    // Blok useEffect utama untuk mengambil data dari Firestore
     useEffect(() => {
         const q = query(collection(db, "applications"), orderBy("no"));
         
@@ -26,12 +26,22 @@ const App: React.FC = () => {
             });
             setApplications(appsData);
         }, (error) => {
-            // Menambahkan penanganan error untuk melihat masalah koneksi di console
             console.error("Gagal koneksi ke Firestore: ", error);
         });
 
         return () => unsubscribe();
     }, []);
+
+    // --- BLOK KODE DIAGNOSTIK ---
+    // Kode ini akan mencetak env variables ke console saat aplikasi dimuat
+    useEffect(() => {
+        console.log("--- MEMERIKSA ENVIRONMENT VARIABLES DARI VERCEL ---");
+        console.log("API_KEY:", process.env.REACT_APP_FIREBASE_API_KEY);
+        console.log("PROJECT_ID:", process.env.REACT_APP_FIREBASE_PROJECT_ID);
+        console.log("STORAGE_BUCKET:", process.env.REACT_APP_FIREBASE_STORAGE_BUCKET);
+        console.log("-------------------------------------------------");
+    }, []);
+    // ---------------------------
 
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingApplication, setEditingApplication] = useState<Application | null>(null);
