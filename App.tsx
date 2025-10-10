@@ -1,8 +1,8 @@
-// App.tsx - Versi Final dengan Koneksi Firebase dan Perbaikan Typo
+// App.tsx - Versi Final Absolut
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
-import { db } from './firebase'; // Pastikan file firebase.ts ada di direktori yang sama
+import { db } from './firebase';
 
 import { Application } from './types';
 import Header from './components/Header';
@@ -13,34 +13,33 @@ import { PlusIcon } from './components/icons/PlusIcon';
 import ConfirmationModal from './components/ConfirmationModal';
 
 const App: React.FC = () => {
+    // PENTING: State harus dimulai dengan array kosong, BUKAN data awal.
     const [applications, setApplications] = useState<Application[]>([]);
     
-    // Mengambil data dari Firestore secara real-time
     useEffect(() => {
         const q = query(collection(db, "applications"), orderBy("no"));
         
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
             const appsData: Application[] = [];
             querySnapshot.forEach((doc) => {
-                // Baris ini sudah diperbaiki
                 appsData.push({ ...doc.data(), id: doc.id } as Application);
             });
             setApplications(appsData);
+        }, (error) => {
+            // Menambahkan penanganan error untuk melihat masalah koneksi di console
+            console.error("Gagal koneksi ke Firestore: ", error);
         });
 
-        // Membersihkan listener saat komponen tidak lagi digunakan
         return () => unsubscribe();
-    }, []); // Array kosong berarti efek ini hanya berjalan sekali
+    }, []);
 
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingApplication, setEditingApplication] = useState<Application | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedPlatform, setSelectedPlatform] = useState<string>('');
     const [selectedLocation, setSelectedLocation] = useState<string>('');
-
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [applicationToDelete, setApplicationToDelete] = useState<Application | null>(null);
-
 
     const handleOpenForm = (app?: Application) => {
         setEditingApplication(app || null);
@@ -52,7 +51,6 @@ const App: React.FC = () => {
         setEditingApplication(null);
     };
 
-    // Menyimpan atau mengupdate data ke Firestore
     const handleSaveApplication = async (app: Application) => {
         try {
             if (editingApplication && editingApplication.id) {
@@ -71,7 +69,6 @@ const App: React.FC = () => {
         handleCloseForm();
     };
     
-    // Menghapus data dari Firestore
     const handleDeleteApplication = async (id: string) => {
         try {
             const appDocRef = doc(db, 'applications', id);
@@ -81,7 +78,6 @@ const App: React.FC = () => {
         }
     };
     
-    // Alur konfirmasi hapus
     const handleRequestDelete = (app: Application) => {
         setApplicationToDelete(app);
         setIsConfirmModalOpen(true);
@@ -100,7 +96,6 @@ const App: React.FC = () => {
         setApplicationToDelete(null);
     };
     
-    // Logika filtering dan lainnya (tidak perlu diubah)
     const filteredApplications = useMemo(() => {
         return applications.filter(app => {
             const searchMatch = app.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -144,11 +139,20 @@ const App: React.FC = () => {
                     </button>
                 </div>
                 
-                 <div className="mb-6 p-4 bg-white dark:bg-slate-800 rounded-xl shadow-lg">
-                    <p className="text-center text-slate-700 dark:text-slate-300 font-medium">
-                        Sejauh ini kamu sudah kirim total <span className="font-bold text-brand-600">{applications.length}</span> lamaran. Semangat, Rifqi! Semoga segera ada kabar baik, ya! 💪
-                    </p>
-                </div>
+                {applications.length > 0 ? (
+                    <div className="mb-6 p-4 bg-white dark:bg-slate-800 rounded-xl shadow-lg">
+                        <p className="text-center text-slate-700 dark:text-slate-300 font-medium">
+                            Sejauh ini kamu sudah kirim total <span className="font-bold text-brand-600">{applications.length}</span> lamaran. Semangat, Rifqi! Semoga segera ada kabar baik, ya! 💪
+                        </p>
+                    </div>
+                ) : (
+                    <div className="mb-6 p-4 bg-white dark:bg-slate-800 rounded-xl shadow-lg">
+                         <p className="text-center text-slate-700 dark:text-slate-300 font-medium">
+                            Belum ada data lamaran. Tambahkan lamaran pertamamu!
+                        </p>
+                    </div>
+                )}
+
 
                 <Dashboard applications={applications} />
 
