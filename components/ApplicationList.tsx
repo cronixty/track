@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Application } from '../types';
 import { STATUS_COLORS } from '../constants';
@@ -58,8 +57,9 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
             return;
         }
 
-        const dataToExport = applications.map(app => ({
-            'No': app.no,
+        // PERBAIKAN 1: Menambahkan index di sini agar Excel juga urut 1, 2, 3...
+        const dataToExport = applications.map((app, index) => ({
+            'No': index + 1,
             'Perusahaan': app.company,
             'Posisi': app.role,
             'Tanggal Submit': new Date(app.submissionDate).toLocaleDateString('id-ID'),
@@ -160,9 +160,11 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                         </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
-                       {applications.length > 0 ? applications.map((app) => (
+                       {/* PERBAIKAN 2: Menambahkan index di sini agar tampilan tabel urut 1, 2, 3... */}
+                       {applications.length > 0 ? applications.map((app, index) => (
                             <tr key={app.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                                <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">{app.no}</td>
+                                {/* PERBAIKAN 3: Menggunakan index + 1 sebagai nomor urut */}
+                                <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">{index + 1}</td>
                                 <td className="px-6 py-4 whitespace-nowrap max-w-xs">
                                     <div className="text-sm font-semibold text-slate-900 dark:text-white truncate">{app.company}</div>
                                     <div className="text-sm text-slate-500 dark:text-slate-400 truncate">{app.role}</div>
