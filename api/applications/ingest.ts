@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { getIngestSecret } from '../_lib/firebaseAdmin';
 
 const APPLICATION_STATUS = {
   DIKIRIM: 'Dikirim',
@@ -37,6 +36,10 @@ type FirestoreFields = Record<string, any>;
 
 function normalizeText(value: unknown): string {
   return String(value || '').trim();
+}
+
+function getIngestSecret(): string {
+  return normalizeText(process.env.TRACK_INGEST_SECRET);
 }
 
 function normalizeStatus(value: unknown): ApplicationStatus {
