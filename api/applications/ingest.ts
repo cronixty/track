@@ -293,10 +293,17 @@ export default async function handler(req: any, res: any) {
       }),
     };
 
-    await firestoreFetchJson(`${docUrl}?key=${apiKey}`, {
-      method: 'PATCH',
-      body: JSON.stringify(firestoreBody),
-    });
+    if (existingDoc) {
+      await firestoreFetchJson(`${docUrl}?key=${apiKey}`, {
+        method: 'PATCH',
+        body: JSON.stringify(firestoreBody),
+      });
+    } else {
+      await firestoreFetchJson(`${documentsBase}/applications?documentId=${docId}&key=${apiKey}`, {
+        method: 'POST',
+        body: JSON.stringify(firestoreBody),
+      });
+    }
 
     return res.status(existingDoc ? 200 : 201).json({
       ok: true,
