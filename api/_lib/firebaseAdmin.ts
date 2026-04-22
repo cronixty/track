@@ -50,7 +50,9 @@ function getAdminApp() {
   });
 }
 
-export const adminDb = getFirestore(getAdminApp());
+export function getAdminDb() {
+  return getFirestore(getAdminApp());
+}
 
 export function getIngestSecret(): string {
   return String(process.env.TRACK_INGEST_SECRET || '').trim();

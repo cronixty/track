@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { adminDb, getIngestSecret } from '../_lib/firebaseAdmin';
+import { getAdminDb, getIngestSecret } from '../_lib/firebaseAdmin';
 import { ApplicationStatus } from '../../types';
 
 type IngestPayload = {
@@ -104,6 +104,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
+    const adminDb = getAdminDb();
     const expectedSecret = getIngestSecret();
     if (!expectedSecret) {
       return res.status(500).json({ ok: false, error: 'missing_server_secret' });
