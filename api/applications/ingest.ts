@@ -1,6 +1,16 @@
 import { createHash } from 'node:crypto';
 import { getAdminDb, getIngestSecret } from '../_lib/firebaseAdmin';
-import { ApplicationStatus } from '../../types';
+
+const APPLICATION_STATUS = {
+  DIKIRIM: 'Dikirim',
+  PROSES: 'Proses',
+  TES_SELESAI: 'Tes Selesai',
+  DITOLAK: 'Ditolak',
+  TAWARAN: 'Tawaran',
+  WISHLIST: 'Wishlist',
+} as const;
+
+type ApplicationStatus = (typeof APPLICATION_STATUS)[keyof typeof APPLICATION_STATUS];
 
 type IngestPayload = {
   secret?: string;
@@ -30,15 +40,15 @@ function normalizeText(value: unknown): string {
 function normalizeStatus(value: unknown): ApplicationStatus {
   const raw = normalizeText(value).toLowerCase();
 
-  if (!raw) return ApplicationStatus.DIKIRIM;
-  if (['applied', 'dikirim', 'sent', 'submitted'].includes(raw)) return ApplicationStatus.DIKIRIM;
-  if (['process', 'proses', 'interview', 'invitation', 'tes', 'test'].includes(raw)) return ApplicationStatus.PROSES;
-  if (['tes selesai', 'test done', 'test complete', 'tes_selesai'].includes(raw)) return ApplicationStatus.TES_SELESAI;
-  if (['offer', 'offered', 'tawaran'].includes(raw)) return ApplicationStatus.TAWARAN;
-  if (['rejected', 'rejection', 'ditolak'].includes(raw)) return ApplicationStatus.DITOLAK;
-  if (['wishlist'].includes(raw)) return ApplicationStatus.WISHLIST;
+  if (!raw) return APPLICATION_STATUS.DIKIRIM;
+  if (['applied', 'dikirim', 'sent', 'submitted'].includes(raw)) return APPLICATION_STATUS.DIKIRIM;
+  if (['process', 'proses', 'interview', 'invitation', 'tes', 'test'].includes(raw)) return APPLICATION_STATUS.PROSES;
+  if (['tes selesai', 'test done', 'test complete', 'tes_selesai'].includes(raw)) return APPLICATION_STATUS.TES_SELESAI;
+  if (['offer', 'offered', 'tawaran'].includes(raw)) return APPLICATION_STATUS.TAWARAN;
+  if (['rejected', 'rejection', 'ditolak'].includes(raw)) return APPLICATION_STATUS.DITOLAK;
+  if (['wishlist'].includes(raw)) return APPLICATION_STATUS.WISHLIST;
 
-  return ApplicationStatus.DIKIRIM;
+  return APPLICATION_STATUS.DIKIRIM;
 }
 
 function toIsoDate(value: unknown): string {
@@ -89,7 +99,7 @@ function buildSourceKey(payload: IngestPayload): string {
   return composite || `${Date.now()}`;
 }
 
-async function getNextApplicationNumber(): Promise<number> {
+async function getNextApplicationNumber(adminDb: ReturnType<typeof getAdminDb>): Promise<number> {
   const snap = await adminDb.collection('applications').orderBy('no', 'desc').limit(1).get();
   if (snap.empty) return 1;
 
@@ -127,7 +137,9 @@ export default async function handler(req: any, res: any) {
     const docRef = adminDb.collection('applications').doc(docId);
     const existingSnap = await docRef.get();
     const existingData = existingSnap.exists ? existingSnap.data() || {} : {};
-    const nextNo = existingSnap.exists ? Number(existingData.no || 0) || await getNextApplicationNumber() : await getNextApplicationNumber();
+    const nextNo = existingSnap.exists
+      ? Number(existingData.no || 0) || await getNextApplicationNumber(adminDb)
+      : await getNextApplicationNumber(adminDb);
 
     const submissionDate = toIsoDate(payload.applied_at || payload.submissionDate);
     const status = normalizeStatus(payload.status);
