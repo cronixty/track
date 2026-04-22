@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { getAdminDb, getIngestSecret } from '../_lib/firebaseAdmin';
+import { getIngestSecret } from '../_lib/firebaseAdmin';
 
 const APPLICATION_STATUS = {
   DIKIRIM: 'Dikirim',
@@ -32,6 +32,8 @@ type IngestPayload = {
   work_system?: string;
   workSystem?: string;
 };
+
+type FirestoreFields = Record<string, any>;
 
 function normalizeText(value: unknown): string {
   return String(value || '').trim();
@@ -99,11 +101,123 @@ function buildSourceKey(payload: IngestPayload): string {
   return composite || `${Date.now()}`;
 }
 
-async function getNextApplicationNumber(adminDb: ReturnType<typeof getAdminDb>): Promise<number> {
-  const snap = await adminDb.collection('applications').orderBy('no', 'desc').limit(1).get();
-  if (snap.empty) return 1;
+function getFirestoreConfig() {
+  const projectId = normalizeText(process.env.VITE_FIREBASE_PROJECT_ID);
+  const apiKey = normalizeText(process.env.VITE_FIREBASE_API_KEY);
 
-  const current = Number(snap.docs[0].data()?.no || 0);
+  if (!projectId || !apiKey) {
+    throw new Error('missing_firestore_client_env');
+  }
+
+  const documentsBase = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
+  return { projectId, apiKey, documentsBase };
+}
+
+async function firestoreFetchJson(url: string, init?: RequestInit) {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers || {}),
+    },
+  });
+
+  const text = await response.text();
+  let data: any = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const message =
+      data?.error?.message ||
+      data?.error ||
+      text ||
+      `firestore_http_${response.status}`;
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+function encodeFirestoreValue(value: any): any {
+  if (value === null || value === undefined || value === '') {
+    return { nullValue: null };
+  }
+  if (typeof value === 'string') {
+    return { stringValue: value };
+  }
+  if (typeof value === 'boolean') {
+    return { booleanValue: value };
+  }
+  if (typeof value === 'number') {
+    if (Number.isInteger(value)) {
+      return { integerValue: String(value) };
+    }
+    return { doubleValue: value };
+  }
+  return { stringValue: String(value) };
+}
+
+function decodeFirestoreValue(value: any): any {
+  if (!value || typeof value !== 'object') return null;
+  if ('stringValue' in value) return value.stringValue;
+  if ('integerValue' in value) return Number(value.integerValue);
+  if ('doubleValue' in value) return Number(value.doubleValue);
+  if ('booleanValue' in value) return Boolean(value.booleanValue);
+  if ('timestampValue' in value) return value.timestampValue;
+  if ('nullValue' in value) return null;
+  return null;
+}
+
+function decodeFirestoreFields(fields: FirestoreFields | undefined): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(fields || {})) {
+    result[key] = decodeFirestoreValue(value);
+  }
+  return result;
+}
+
+function encodeFirestoreFields(data: Record<string, any>): FirestoreFields {
+  const fields: FirestoreFields = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) continue;
+    fields[key] = encodeFirestoreValue(value);
+  }
+  return fields;
+}
+
+async function getExistingDocument(docUrl: string, apiKey: string) {
+  try {
+    return await firestoreFetchJson(`${docUrl}?key=${apiKey}`);
+  } catch (error: any) {
+    const message = String(error?.message || error);
+    if (message.includes('Requested entity was not found')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function getNextApplicationNumber(documentsBase: string, apiKey: string): Promise<number> {
+  const data = await firestoreFetchJson(`${documentsBase}:runQuery?key=${apiKey}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: 'applications' }],
+        orderBy: [{ field: { fieldPath: 'no' }, direction: 'DESCENDING' }],
+        limit: 1,
+      },
+    }),
+  });
+
+  if (!Array.isArray(data) || data.length === 0 || !data[0]?.document?.fields?.no) {
+    return 1;
+  }
+
+  const current = Number(decodeFirestoreValue(data[0].document.fields.no) || 0);
   return current + 1;
 }
 
@@ -114,7 +228,6 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const adminDb = getAdminDb();
     const expectedSecret = getIngestSecret();
     if (!expectedSecret) {
       return res.status(500).json({ ok: false, error: 'missing_server_secret' });
@@ -132,14 +245,16 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ ok: false, error: 'company_and_position_required' });
     }
 
+    const { apiKey, documentsBase } = getFirestoreConfig();
     const sourceKey = buildSourceKey(payload);
     const docId = `bot_${createHash('sha1').update(sourceKey).digest('hex')}`;
-    const docRef = adminDb.collection('applications').doc(docId);
-    const existingSnap = await docRef.get();
-    const existingData = existingSnap.exists ? existingSnap.data() || {} : {};
-    const nextNo = existingSnap.exists
-      ? Number(existingData.no || 0) || await getNextApplicationNumber(adminDb)
-      : await getNextApplicationNumber(adminDb);
+    const docUrl = `${documentsBase}/applications/${docId}`;
+
+    const existingDoc = await getExistingDocument(docUrl, apiKey);
+    const existingData = decodeFirestoreFields(existingDoc?.fields);
+    const nextNo = existingDoc
+      ? Number(existingData.no || 0) || (await getNextApplicationNumber(documentsBase, apiKey))
+      : await getNextApplicationNumber(documentsBase, apiKey);
 
     const submissionDate = toIsoDate(payload.applied_at || payload.submissionDate);
     const status = normalizeStatus(payload.status);
@@ -162,20 +277,27 @@ export default async function handler(req: any, res: any) {
       rawStatus: normalizeText(payload.status),
       syncedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      createdAt: existingData.createdAt || new Date().toISOString(),
+      testDate: existingData.testDate || '',
+      testStatus: existingData.testStatus || '',
+      result: existingData.result || '',
     };
 
-    await docRef.set(
-      {
+    const firestoreBody = {
+      fields: encodeFirestoreFields({
         ...existingData,
         ...record,
-        createdAt: existingData.createdAt || new Date().toISOString(),
-      },
-      { merge: true },
-    );
+      }),
+    };
 
-    return res.status(existingSnap.exists ? 200 : 201).json({
+    await firestoreFetchJson(`${docUrl}?key=${apiKey}`, {
+      method: 'PATCH',
+      body: JSON.stringify(firestoreBody),
+    });
+
+    return res.status(existingDoc ? 200 : 201).json({
       ok: true,
-      created: !existingSnap.exists,
+      created: !existingDoc,
       id: docId,
       no: nextNo,
     });
