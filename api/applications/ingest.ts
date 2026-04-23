@@ -197,7 +197,11 @@ async function getExistingDocument(docUrl: string, apiKey: string) {
     return await firestoreFetchJson(`${docUrl}?key=${apiKey}`);
   } catch (error: any) {
     const message = String(error?.message || error);
-    if (message.includes('Requested entity was not found')) {
+    if (
+      message.includes('Requested entity was not found') ||
+      /document .* not found/i.test(message) ||
+      /not found/i.test(message)
+    ) {
       return null;
     }
     throw error;
